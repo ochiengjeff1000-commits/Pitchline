@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PitchLine Admin</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+<div id="loginScreen" class="admin-login-screen">
+  <div class="admin-login-card">
+    <h1>PitchLine Admin</h1>
+    <p>Enter your admin API key to continue.</p>
+    <input type="password" id="adminKeyInput" placeholder="Admin API key" autocomplete="off">
+    <button id="adminLoginBtn" class="admin-btn admin-btn-primary">Sign in</button>
+    <div id="loginError" class="admin-error"></div>
+  </div>
+</div>
+
+<div id="adminApp" class="admin-app" style="display:none;">
+  <header class="admin-header">
+    <h1>PitchLine Admin</h1>
+    <button id="logoutBtn" class="admin-btn admin-btn-ghost">Sign out</button>
+  </header>
+
+  <nav class="admin-nav">
+    <button class="admin-nav-btn active" data-admin-tab="dashboard">Dashboard</button>
+    <button class="admin-nav-btn" data-admin-tab="settings">Payments</button>
+    <button class="admin-nav-btn" data-admin-tab="jackpots">Jackpots</button>
+    <button class="admin-nav-btn" data-admin-tab="sync">Manual Sync</button>
+  </nav>
+
+  <main class="admin-main">
+    <section id="admin-tab-dashboard" class="admin-section active"></section>
+    <section id="admin-tab-settings" class="admin-section"></section>
+    <section id="admin-tab-jackpots" class="admin-section"></section>
+    <section id="admin-tab-sync" class="admin-section"></section>
+  </main>
+</div>
+
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>

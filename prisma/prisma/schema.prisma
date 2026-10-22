@@ -1,0 +1,386 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeagueTier {
+  TIER_1
+  TIER_2
+  TIER_3
+  TIER_4
+}
+
+enum Sport {
+  FOOTBALL
+  BASKETBALL
+  HOCKEY
+  BASEBALL
+  HANDBALL
+  VOLLEYBALL
+  RUGBY
+  AFL
+  NFL
+}
+
+enum DataProvider {
+  API_SPORTS
+  FOOTBALL_DATA
+  JACKPOT_MANUAL // teams/leagues/fixtures auto-created by jackpotIngestion when a synced
+                 // jackpot leg doesn't match anything the daily sync has populated yet —
+                 // see services/jackpotIngestion.js resolveOrCreateFixture()
+}
+
+enum FixtureStatus {
+  SCHEDULED
+  LIVE
+  HALFTIME
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+enum Outcome {
+  HOME
+  DRAW
+  AWAY
+}
+
+enum JackpotPlatform {
+  SPORTPESA
+  BETIKA
+  MOZZART
+  SHABIKI
+}
+
+enum JackpotType {
+  MIDWEEK
+  MEGA
+  GRAND
+  DAILY
+  WEEKLY
+  SABABISHA
+}
+
+enum JackpotStatus {
+  NEEDS_REVIEW // ingested from a quick-paste or auto-source adapter, not yet human-verified — hidden from the public jackpot list until approved
+  OPEN
+  CLOSED
+  SETTLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model StandingsCache {
+  id        Int      @id @default(autoincrement())
+  leagueId  Int
+  season    Int
+  data      Json // raw standings rows: [{ rank, teamApiId, teamName, played, win, draw, lose, goalsDiff, points }]
+  updatedAt DateTime @updatedAt
+
+  @@unique([leagueId, season])
+}
+
+model H2hLookup {
+  id            Int      @id @default(autoincrement())
+  teamAId       Int // always the lower of the two team ids — order-independent pair key
+  teamBId       Int
+  meetingsFound Int      @default(0)
+  lastCheckedAt DateTime @default(now())
+
+  @@unique([teamAId, teamBId])
+}
+
+model League {
+  id        Int        @id @default(autoincrement())
+  apiId     Int
+  sport     Sport      @default(FOOTBALL)
+  provider  DataProvider @default(API_SPORTS) // same numeric apiId space can collide between providers
+  name      String
+  country   String
+  logoUrl   String?
+  tier      LeagueTier @default(TIER_4)
+  fixtures  Fixture[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([apiId, sport, provider])
+  @@index([tier])
+  @@index([sport])
+}
+
+model Team {
+  id            Int          @id @default(autoincrement())
+  apiId         Int
+  sport         Sport        @default(FOOTBALL)
+  provider      DataProvider @default(API_SPORTS)
+  name          String
+  logoUrl       String?
+  country       String? // backfilled on-demand by teamProfileService, not the daily sync
+  venueName     String?
+  venueCity     String?
+  squadJson     Json? // cached squad roster — on-demand, refreshed when stale (see teamProfileService)
+  squadCachedAt DateTime?
+  profileCheckedAt DateTime? // last time we tried to backfill country/venue — avoids re-querying teams with no data available
+  homeFixtures  Fixture[]    @relation("HomeTeam")
+  awayFixtures  Fixture[]    @relation("AwayTeam")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([apiId, sport, provider])
+}
+
+model Fixture {
+  id                Int                @id @default(autoincrement())
+  apiId             Int
+  sport             Sport              @default(FOOTBALL)
+  provider          DataProvider       @default(API_SPORTS)
+  league            League             @relation(fields: [leagueId], references: [id])
+  leagueId          Int
+  homeTeam          Team               @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  homeTeamId        Int
+  awayTeam          Team               @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  awayTeamId        Int
+  kickoff           DateTime
+  status            FixtureStatus      @default(SCHEDULED)
+  elapsed           Int? // live match clock — football-style continuous minutes for FOOTBALL/HANDBALL/RUGBY/AFL; for period-based sports (BASKETBALL/HOCKEY/BASEBALL/etc) this is whatever raw clock value the provider gives (often a countdown within the period, NOT total elapsed minutes) — see periodLabel below, which is what actually makes it meaningful for those sports.
+  periodLabel       String?           @db.VarChar(24) // e.g. "Q3", "2nd Period", "Bottom 7th" — set for period-based sports so the UI shows an accurate period instead of misreading `elapsed` as a football-style minute count
+  espnId            String?            @db.VarChar(64) // ESPN event id, cached once matched so later polls/on-demand calls skip fuzzy name matching
+  homeScore         Int?
+  awayScore         Int?
+  prediction        Prediction?
+  jackpotSelections JackpotSelection[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@unique([apiId, sport, provider])
+  @@index([kickoff])
+  @@index([status])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([sport])
+  @@index([espnId])
+}
+
+model Prediction {
+  id               Int       @id @default(autoincrement())
+  fixture          Fixture   @relation(fields: [fixtureId], references: [id])
+  fixtureId        Int       @unique
+  probHome         Float
+  probDraw         Float
+  probAway         Float
+  bttsYesProb      Float?
+  bttsNoProb       Float?
+  predictedOutcome Outcome
+  predictedBtts    Boolean?
+  predictedHomeGoals Int?    // most likely exact scoreline, from the Poisson matrix's highest-probability cell
+  predictedAwayGoals Int?
+  over25Prob       Float?    // P(total goals > 2.5), summed off the same matrix
+  under25Prob      Float?
+  predictedOver25  Boolean?
+  // Expanded markets — football only (generatePrediction), all null for
+  // sports without a goal-based Poisson model (see generateTwoWayPrediction
+  // / generateThreeWayPrediction).
+  over15Prob          Float?
+  under15Prob         Float?
+  over35Prob          Float?
+  under35Prob         Float?
+  doubleChance1XProb  Float?   // Home or Draw
+  doubleChance12Prob  Float?   // Home or Away (i.e. not a draw)
+  doubleChanceX2Prob  Float?   // Draw or Away
+  dnbHomeProb         Float?   // Draw No Bet — home win probability with the draw outcome removed and the rest renormalized
+  dnbAwayProb         Float?
+  cleanSheetHomeProb  Float?   // P(away scores 0)
+  cleanSheetAwayProb  Float?   // P(home scores 0)
+  oddTotalProb        Float?   // P(total goals is odd)
+  evenTotalProb       Float?
+  correctScoreTop3    Json?    // [{home, away, prob}, ...] the 3 most likely exact scorelines off the same matrix
+  confidence       Float
+  sampleSize       Int       @default(0)
+  justification    String?   @db.Text
+  actualOutcome    Outcome?
+  isCorrect        Boolean?
+  bttsActual       Boolean?
+  bttsCorrect      Boolean?
+  settledAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([isCorrect])
+}
+
+model NewsArticle {
+  id          Int      @id @default(autoincrement())
+  title       String
+  url         String   @unique
+  source      String
+  sport       Sport    @default(FOOTBALL)
+  summary     String?  @db.Text
+  imageUrl    String?
+  publishedAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([publishedAt])
+  @@index([source])
+  @@index([sport])
+}
+
+model FplPlayer {
+  id                Int      @id @default(autoincrement())
+  fplId             Int      @unique
+  firstName         String
+  lastName          String
+  teamName          String
+  position          String
+  priceTenths       Int
+  form              Float
+  totalPoints       Int
+  selectedByPercent Float
+  photoId           String
+  status            String
+  news              String?  @db.Text
+  epNext            Float?
+  updatedAt         DateTime @updatedAt
+
+  @@index([position])
+  @@index([teamName])
+}
+
+model FplFixture {
+  id             Int       @id @default(autoincrement())
+  fplId          Int       @unique
+  gameweek       Int
+  homeTeamName   String
+  awayTeamName   String
+  homeDifficulty Int
+  awayDifficulty Int
+  kickoff        DateTime?
+
+  @@index([gameweek])
+}
+
+model FplSquadRecommendation {
+  id                Int      @id @default(autoincrement())
+  gameweek          Int      @unique
+  generatedAt       DateTime @default(now())
+  totalCostTenths   Int
+  totalXPts         Float
+  totalPointsEarned Int?     // actual points scored once the gameweek finishes — null until then (see fplClient.syncGameweekPoints)
+  formation         String?  // e.g. "3-4-3" — the starting XI shape actually picked
+  explanation       String?  @db.Text // squad-level rationale shown below the TOTW grid
+  squad             Json
+}
+
+model FplGameweek {
+  id           Int       @id // FPL's own event/gameweek number, not autoincrement
+  deadlineTime DateTime?
+  isCurrent    Boolean   @default(false)
+  isNext       Boolean   @default(false)
+  finished     Boolean   @default(false) // drives whether syncGameweekPoints backfills totalPointsEarned yet
+}
+
+model AdminSetting {
+  key   String @id
+  value String @db.Text
+}
+
+model SiteStat {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     Float
+  updatedAt DateTime @updatedAt
+}
+
+model SyncLog {
+  id             Int      @id @default(autoincrement())
+  jobName        String
+  apiCallsUsed   Int      @default(0)
+  fixturesIn     Int      @default(0)
+  predictionsOut Int      @default(0)
+  status         String
+  errorMessage   String?  @db.Text
+  runAt          DateTime @default(now())
+}
+
+model Jackpot {
+  id           Int                @id @default(autoincrement())
+  platform     JackpotPlatform
+  type         JackpotType
+  label        String
+  totalGames   Int
+  status       JackpotStatus      @default(OPEN)
+  correctCount Int?
+  settledAt    DateTime?
+  selections   JackpotSelection[]
+  payments     Payment[]
+  unlocks      JackpotUnlock[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([platform, type, label])
+  @@index([platform, type, createdAt])
+}
+
+model JackpotSelection {
+  id        Int      @id @default(autoincrement())
+  jackpot   Jackpot  @relation(fields: [jackpotId], references: [id])
+  jackpotId Int
+  position  Int
+  fixture   Fixture  @relation(fields: [fixtureId], references: [id])
+  fixtureId Int
+  // Cached analysis snapshot, written at ingest time (see
+  // jackpotIngestion.ingestJackpot) directly from the freshly-generated
+  // Prediction — lets the Jackpots tab render 1X2 + confidence for every
+  // leg straight off this row with zero extra fixture/prediction joins
+  // or on-demand generation. The live Prediction row (via `fixture`) is
+  // still the source of truth for settlement (actualOutcome/isCorrect);
+  // these are a read-optimized copy, refreshed on every re-ingest.
+  analysisProbHome         Float?
+  analysisProbDraw         Float?
+  analysisProbAway         Float?
+  analysisPredictedOutcome Outcome?
+  analysisConfidence       Float?
+  analysisJustification    String?  @db.Text
+  analyzedAt               DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([jackpotId, position])
+  @@index([fixtureId])
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  jackpot       Jackpot       @relation(fields: [jackpotId], references: [id])
+  jackpotId     Int
+  phoneNumber   String
+  amount        Int
+  provider      String        @default("INTASEND")
+  apiRef        String        @unique
+  invoiceId     String?
+  status        PaymentStatus @default(PENDING)
+  providerState String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([phoneNumber])
+  @@index([status])
+  @@index([invoiceId])
+}
+
+model JackpotUnlock {
+  id          Int      @id @default(autoincrement())
+  jackpot     Jackpot  @relation(fields: [jackpotId], references: [id])
+  jackpotId   Int
+  phoneNumber String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([jackpotId, phoneNumber])
+}

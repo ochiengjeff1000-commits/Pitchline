@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PitchLine — Predictions, Live Scores &amp; Jackpots</title>
+<meta name="description" content="Automated football predictions, live scores, and jackpot slips for Kenya and East Africa.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12201A">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PitchLine">
+</head>
+<body>
+
+<div class="ticker-wrap" id="ticker" aria-label="Live scores ticker"></div>
+
+<header class="site">
+  <div class="header-row">
+    <div class="brand">
+      <div class="brand-mark">P</div>
+      <div class="brand-name">PitchLine<span class="sub">Predictions &amp; Jackpots</span></div>
+    </div>
+    <div class="winrate-badge" id="winrateBadge">
+      <span class="figure mono">—%</span>
+      <span class="sep"></span>
+      <span class="label">1X2 win rate</span>
+    </div>
+  </div>
+  <nav class="nav-tabs" id="navTabs">
+    <button class="tab-btn active" data-target="fixtures">📅 Scores &amp; Fixtures</button>
+    <button class="tab-btn live-tab" data-target="live"><span class="live-dot"></span>Live <span id="liveTabCount" class="mono" style="font-size:11px;opacity:0.85;"></span></button>
+    <button class="tab-btn" data-target="predictions">🔮 Predictions</button>
+    <button class="tab-btn" data-target="accuracy">📊 Track Record</button>
+    <button class="tab-btn" data-target="news">📰 News</button>
+    <button class="tab-btn fpl-tab" data-target="fpl">🎮 FPL Scout</button>
+  </nav>
+  <div class="control-bar" id="controlBar">
+    <div class="search-wrap">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search teams, leagues, news…" autocomplete="off">
+      <div class="search-dropdown" id="searchDropdown"></div>
+    </div>
+    <div class="sport-selector" id="sportSelector"></div>
+    <input type="date" class="date-picker" id="datePicker" aria-label="Pick a date">
+  </div>
+</header>
+
+<main>
+  <section class="view active" id="view-fixtures" data-view-group="fixtures">
+    <div id="bestBetBanner"></div>
+    <div id="myGamesPanel"></div>
+    <div class="toolbar">
+      <h2>Scores &amp; fixtures</h2>
+      <span class="date-pill mono" id="todayDate0">—</span>
+    </div>
+    <div id="leagueList-fixtures"></div>
+  </section>
+
+  <section class="view" id="view-live" data-view-group="fixtures">
+    <div class="toolbar">
+      <h2>Live Matches</h2>
+      <span class="date-pill mono" style="color:var(--red-500);border-color:rgba(239,87,87,0.3);">● LIVE NOW</span>
+    </div>
+    <div id="leagueList-live"></div>
+  </section>
+
+  <section class="view" id="view-predictions">
+    <div class="toolbar">
+      <h2 id="predictionsTitle">All predictions</h2>
+      <span class="date-pill mono" id="todayDate">—</span>
+    </div>
+    <div class="sub-tabs" id="predictionsSubTabs">
+      <button class="sub-tab-btn active" data-sub="all">All</button>
+      <button class="sub-tab-btn" data-sub="1x2">⚽ 1X2 Picks</button>
+      <button class="sub-tab-btn" data-sub="btts">bb Both Teams To Score</button>
+      <button class="sub-tab-btn jackpot-sub" data-sub="jackpots">🏆 Jackpots</button>
+    </div>
+
+    <div class="sub-view active" id="subview-all" data-view-group="fixtures">
+      <div id="leagueList-all"></div>
+    </div>
+    <div class="sub-view" id="subview-1x2" data-view-group="fixtures" style="display:none;">
+      <div id="leagueList-1x2"></div>
+    </div>
+    <div class="sub-view" id="subview-btts" data-view-group="fixtures" style="display:none;">
+      <div id="leagueList-btts"></div>
+    </div>
+    <div class="sub-view" id="subview-jackpots" style="display:none;">
+      <div id="jackpotList"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-accuracy">
+    <div class="toolbar">
+      <h2>Track record</h2>
+      <div class="accuracy-window-picker mono" id="accuracyWindowPicker">
+        <button class="win-btn" data-days="7">7d</button>
+        <button class="win-btn active" data-days="30">30d</button>
+        <button class="win-btn" data-days="90">90d</button>
+      </div>
+    </div>
+    <p class="accuracy-intro">Every prediction PitchLine has published is graded automatically once the match finishes — nothing here is cherry-picked. This is the actual hit rate, updated live.</p>
+    <div id="accuracySummary" class="accuracy-summary-grid"></div>
+    <div class="accuracy-section">
+      <h3>Accuracy by confidence level</h3>
+      <p class="accuracy-hint">If the model is well-calibrated, "High confidence" picks should land more often than "Low confidence" ones.</p>
+      <div id="accuracyConfidence"></div>
+    </div>
+    <div class="accuracy-section">
+      <h3>Accuracy by league</h3>
+      <div id="accuracyLeagues"></div>
+    </div>
+    <div class="accuracy-section">
+      <h3>Recent results</h3>
+      <div id="accuracyTips"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-news">
+    <div class="toolbar"><h2>Trending news</h2></div>
+    <div class="news-sport-tabs" id="newsSportTabs"></div>
+    <div class="news-grid" id="newsGrid"></div>
+  </section>
+
+  <section class="view" id="view-fpl">
+    <div class="toolbar">
+      <h2>PitchLine XI — FPL Scout Hub</h2>
+      <span class="date-pill mono" id="fplGwLabel">GW —</span>
+    </div>
+    <div id="fplDeadlineBar"></div>
+    <div id="fplGwTabs" class="fpl-gw-tabs"></div>
+    <div id="fplSquadWrap"></div>
+  </section>
+</main>
+
+<footer>
+  <strong>PitchLine</strong> predictions are statistical estimates generated from historical match data — not guarantees. Jackpot pools are mapped from third-party platforms (SportPesa, Betika, Mozzart) for informational purposes only; always confirm official slips on the platform itself before staking. Gambling involves risk — please play responsibly and only wager what you can afford to lose. 18+. FPL squad picks are an automated statistical suggestion, not official Fantasy Premier League advice.
+</footer>
+
+<!-- LIVESCORE-STYLE UNIFIED MATCH CENTER MODAL -->
+<div class="modal-backdrop" id="matchCenterModal">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <span id="matchCenterLeagueBread" class="mono" style="font-size:12px;color:var(--teal-400);font-weight:600;">Match Center</span>
+      <button class="modal-close" data-close="matchCenterModal" aria-label="Close">✕</button>
+    </div>
+    
+    <div id="matchScoreboardWrap"></div>
+
+    <div class="momentum-toggle" id="matchCenterTabs">
+      <button class="sub-tab-btn active" data-match-tab="summary">Summary</button>
+      <button class="sub-tab-btn" data-match-tab="stats">Stats</button>
+      <button class="sub-tab-btn" data-match-tab="lineups">Line-ups</button>
+      <button class="sub-tab-btn" data-match-tab="table">Table</button>
+      <button class="sub-tab-btn" data-match-tab="h2h">H2H</button>
+      <button class="sub-tab-btn" data-match-tab="pred">Prediction</button>
+    </div>
+
+    <!-- Summary Tab (Events + Commentary + Live Action Pitch) -->
+    <div id="matchTab-summary">
+      <div style="display:flex;gap:6px;margin:10px 0 12px;">
+        <button class="sub-tab-btn active" id="btnSummaryEvents" style="padding:4px 12px;font-size:11.5px;">Events</button>
+        <button class="sub-tab-btn" id="btnSummaryCommentary" style="padding:4px 12px;font-size:11.5px;">Commentary</button>
+      </div>
+
+      <div id="summaryEventsContainer" class="momentum-wrap"></div>
+      <div id="summaryCommentaryContainer" style="display:none;" class="commentary-wrap"></div>
+
+      <!-- Live Action Pitch Tracker Graphic (LiveScore format) -->
+      <div class="match-tracker-box">
+        <div class="tracker-header">Live Action — Pitch Tracker</div>
+        <div class="pitch-graphic" id="pitchMatchTracker">
+          <div class="pitch-lines"></div>
+          <div class="pitch-overlay-stats" id="pitchOverlayStats"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Tab -->
+    <div id="matchTab-stats" style="display:none;" class="livescore-stats-wrap"></div>
+
+    <!-- Lineups Tab -->
+    <div id="matchTab-lineups" style="display:none;" class="lineups-grid" id="lineupsContainer"></div>
+
+    <!-- Table Tab -->
+    <div id="matchTab-table" style="display:none;" id="tableContainer"></div>
+
+    <!-- H2H Tab -->
+    <div id="matchTab-h2h" style="display:none;"></div>
+
+    <!-- Prediction Tab -->
+    <div id="matchTab-pred" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="fplPlayerModal">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3 id="fplPlayerModalTitle">Player</h3>
+      <button class="modal-close" data-close="fplPlayerModal" aria-label="Close">✕</button>
+    </div>
+    <div id="fplPlayerModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="teamProfileModal">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3 id="teamProfileModalTitle">Team</h3>
+      <button class="modal-close" data-close="teamProfileModal" aria-label="Close">✕</button>
+    </div>
+    <div id="teamProfileModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="jackpotModal">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3 id="jackpotModalTitle">Jackpot</h3>
+      <button class="modal-close" data-close="jackpotModal" aria-label="Close">✕</button>
+    </div>
+    <div id="jackpotModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="unlockModal">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3>Unlock full slip</h3>
+      <button class="modal-close" data-close="unlockModal" aria-label="Close">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--slate-400);margin-top:0;">
+      Enter your M-Pesa number to receive an STK push for
+      <span class="mono" id="unlockPrice" style="color:var(--floodlight-400);">KES 49</span>.
+    </p>
+    <input class="phone-input" id="phoneInput" type="tel" placeholder="2547XXXXXXXX" inputmode="numeric">
+    <button class="btn-primary" id="unlockSubmit" style="width:100%;">Send payment prompt</button>
+    <div class="status-line" id="unlockStatus"></div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
